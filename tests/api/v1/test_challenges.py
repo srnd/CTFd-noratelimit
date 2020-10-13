@@ -135,6 +135,25 @@ def test_api_challenges_get_admin():
     destroy_ctfd(app)
 
 
+def test_api_challenges_get_hidden_admin():
+    """Can an admin see hidden challenges in API list response"""
+    app = create_ctfd()
+    with app.app_context():
+        gen_challenge(app.db, state="hidden")
+        gen_challenge(app.db)
+
+        with login_as_user(app, "admin") as admin:
+            challenges_list = admin.get("/api/v1/challenges", json="").get_json()[
+                "data"
+            ]
+            assert len(challenges_list) == 1
+            challenges_list = admin.get(
+                "/api/v1/challenges?view=admin", json=""
+            ).get_json()["data"]
+            assert len(challenges_list) == 2
+    destroy_ctfd(app)
+
+
 def test_api_challenges_post_admin():
     """Can a user post /api/v1/challenges if admin"""
     app = create_ctfd()
@@ -220,6 +239,21 @@ def test_api_challenge_get_visibility_private():
         r = client.get("/api/v1/challenges/1")
         assert r.status_code == 200
         set_config("challenge_visibility", "public")
+        r = client.get("/api/v1/challenges/1")
+        assert r.status_code == 200
+    destroy_ctfd(app)
+
+
+def test_api_challenge_get_with_admin_only_account_visibility():
+    """Can a private user get /api/v1/challenges/<challenge_id> if account_visibility is admins_only"""
+    app = create_ctfd()
+    with app.app_context():
+        gen_challenge(app.db)
+        register_user(app)
+        client = login_as_user(app)
+        r = client.get("/api/v1/challenges/1")
+        assert r.status_code == 200
+        set_config("account_visibility", "admins")
         r = client.get("/api/v1/challenges/1")
         assert r.status_code == 200
     destroy_ctfd(app)

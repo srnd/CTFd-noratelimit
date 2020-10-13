@@ -1,14 +1,14 @@
-from email.mime.text import MIMEText
+from email.message import EmailMessage
+from unittest.mock import Mock, patch
 
 import requests
 from freezegun import freeze_time
-from mock import Mock, patch
 
 from CTFd.utils import get_config, set_config
 from CTFd.utils.email import (
     sendmail,
-    verify_email_address,
     successful_registration_notification,
+    verify_email_address,
 )
 from tests.helpers import create_ctfd, destroy_ctfd
 
@@ -34,13 +34,17 @@ def test_sendmail_with_smtp_from_config_file(mock_smtp):
         sendmail(to_addr, msg)
 
         ctf_name = get_config("ctf_name")
-        email_msg = MIMEText(msg)
+
+        email_msg = EmailMessage()
+        email_msg.set_content(msg)
+
         email_msg["Subject"] = "Message from {0}".format(ctf_name)
         email_msg["From"] = from_addr
         email_msg["To"] = to_addr
 
-        mock_smtp.return_value.sendmail.assert_called_once_with(
-            from_addr, [to_addr], email_msg.as_string()
+        mock_smtp.return_value.send_message.assert_called()
+        assert str(mock_smtp.return_value.send_message.call_args[0][0]) == str(
+            email_msg
         )
     destroy_ctfd(app)
 
@@ -66,13 +70,15 @@ def test_sendmail_with_smtp_from_db_config(mock_smtp):
         sendmail(to_addr, msg)
 
         ctf_name = get_config("ctf_name")
-        email_msg = MIMEText(msg)
+        email_msg = EmailMessage()
+        email_msg.set_content(msg)
         email_msg["Subject"] = "Message from {0}".format(ctf_name)
         email_msg["From"] = from_addr
         email_msg["To"] = to_addr
 
-        mock_smtp.return_value.sendmail.assert_called_once_with(
-            from_addr, [to_addr], email_msg.as_string()
+        mock_smtp.return_value.send_message.assert_called()
+        assert str(mock_smtp.return_value.send_message.call_args[0][0]) == str(
+            email_msg
         )
     destroy_ctfd(app)
 
@@ -85,17 +91,10 @@ def test_sendmail_with_mailgun_from_config_file(fake_post_request):
         app.config["MAILGUN_API_KEY"] = "key-1234567890-file-config"
         app.config["MAILGUN_BASE_URL"] = "https://api.mailgun.net/v3/file.faked.com"
 
-        from_addr = get_config("mailfrom_addr") or app.config.get("MAILFROM_ADDR")
         to_addr = "user@user.com"
         msg = "this is a test"
 
         sendmail(to_addr, msg)
-
-        ctf_name = get_config("ctf_name")
-        email_msg = MIMEText(msg)
-        email_msg["Subject"] = "Message from {0}".format(ctf_name)
-        email_msg["From"] = from_addr
-        email_msg["To"] = to_addr
 
         fake_response = Mock()
         fake_post_request.return_value = fake_response
@@ -132,17 +131,10 @@ def test_sendmail_with_mailgun_from_db_config(fake_post_request):
         set_config("mailgun_api_key", "key-1234567890-db-config")
         set_config("mailgun_base_url", "https://api.mailgun.net/v3/db.faked.com")
 
-        from_addr = get_config("mailfrom_addr") or app.config.get("MAILFROM_ADDR")
         to_addr = "user@user.com"
         msg = "this is a test"
 
         sendmail(to_addr, msg)
-
-        ctf_name = get_config("ctf_name")
-        email_msg = MIMEText(msg)
-        email_msg["Subject"] = "Message from {0}".format(ctf_name)
-        email_msg["From"] = from_addr
-        email_msg["To"] = to_addr
 
         fake_response = Mock()
         fake_post_request.return_value = fake_response
@@ -196,17 +188,17 @@ def test_verify_email(mock_smtp):
         )
 
         ctf_name = get_config("ctf_name")
-        email_msg = MIMEText(msg)
+        email_msg = EmailMessage()
+        email_msg.set_content(msg)
         email_msg["Subject"] = "Confirm your account for {ctf_name}".format(
             ctf_name=ctf_name
         )
         email_msg["From"] = from_addr
         email_msg["To"] = to_addr
 
-        # Need to freeze time to predict the value of the itsdangerous token.
-        # For now just assert that sendmail was called.
-        mock_smtp.return_value.sendmail.assert_called_with(
-            from_addr, [to_addr], email_msg.as_string()
+        mock_smtp.return_value.send_message.assert_called()
+        assert str(mock_smtp.return_value.send_message.call_args[0][0]) == str(
+            email_msg
         )
     destroy_ctfd(app)
 
@@ -233,16 +225,16 @@ def test_successful_registration_email(mock_smtp):
 
         msg = "You've successfully registered for CTFd!"
 
-        email_msg = MIMEText(msg)
+        email_msg = EmailMessage()
+        email_msg.set_content(msg)
         email_msg["Subject"] = "Successfully registered for {ctf_name}".format(
             ctf_name=ctf_name
         )
         email_msg["From"] = from_addr
         email_msg["To"] = to_addr
 
-        # Need to freeze time to predict the value of the itsdangerous token.
-        # For now just assert that sendmail was called.
-        mock_smtp.return_value.sendmail.assert_called_with(
-            from_addr, [to_addr], email_msg.as_string()
+        mock_smtp.return_value.send_message.assert_called()
+        assert str(mock_smtp.return_value.send_message.call_args[0][0]) == str(
+            email_msg
         )
     destroy_ctfd(app)

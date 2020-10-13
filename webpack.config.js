@@ -6,6 +6,7 @@ const OptimizeCssAssetsPlugin = require('optimize-css-assets-webpack-plugin')
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin')
 const RemoveStrictPlugin = require('remove-strict-webpack-plugin')
 const WebpackShellPlugin = require('webpack-shell-plugin');
+const VueLoaderPlugin = require('vue-loader/lib/plugin');
 
 const roots = {
   'themes/core': {
@@ -36,6 +37,7 @@ const roots = {
     'js': {
       'pages/main': 'assets/js/pages/main.js',
       'pages/challenge': 'assets/js/pages/challenge.js',
+      'pages/challenges': 'assets/js/pages/challenges.js',
       'pages/configs': 'assets/js/pages/configs.js',
       'pages/notifications': 'assets/js/pages/notifications.js',
       'pages/editor': 'assets/js/pages/editor.js',
@@ -63,6 +65,7 @@ function getJSConfig(root, type, entries, mode) {
 
   return {
     entry: out,
+    mode: mode,
     output: {
       path: path.resolve(__dirname, 'CTFd', root, 'static', type),
       publicPath: '/' + root + '/static/' + type,
@@ -73,10 +76,10 @@ function getJSConfig(root, type, entries, mode) {
       splitChunks: {
         chunks: 'all',
         cacheGroups: {
-          plotly: {
-            name: 'plotly',
-            filename: `plotly.bundle.${ext}.js`,
-            test: /plotly/,
+          echarts: {
+            name: 'echarts',
+            filename: `echarts.bundle.${ext}.js`,
+            test: /echarts/,
             priority: 1,
             enforce: true,
           },
@@ -101,6 +104,13 @@ function getJSConfig(root, type, entries, mode) {
             priority: 1,
             reuseExistingChunk: true,
           },
+          components: {
+            name: 'components',
+            filename: `components.${ext}.js`,
+            test: /components/,
+            priority: 1,
+            reuseExistingChunk: true,
+          },
           default: {
             filename: `core.${ext}.js`,
             minChunks: 2,
@@ -113,7 +123,12 @@ function getJSConfig(root, type, entries, mode) {
         new UglifyJsPlugin({
             cache: true,
             parallel: true,
-            sourceMap: true
+            uglifyOptions: {
+              compress: {
+                // Remove console.log in production
+                drop_console: mode === 'production'
+              },
+            },
         }),
       ],
     },
@@ -131,16 +146,41 @@ function getJSConfig(root, type, entries, mode) {
             }
           }
         },
+        {
+          test: /\.vue$/,
+          loader: 'vue-loader',
+          options: {
+            loaders: {
+              css: ['vue-style-loader', {
+                loader: 'css-loader',
+              }],
+              js: [
+                'babel-loader',
+              ],
+            },
+            cacheBusting: true,
+          },
+        },
+        // This rule is magically used to load the <style> section of VueJS SFC.
+        // Don't really understand what magic Vue is using here but it works.
+        {
+          test: /\.css$/,
+          use: [
+            'vue-style-loader',
+            'css-loader'
+          ]
+        },
       ],
     },
     plugins: [
+      new VueLoaderPlugin(),
       new webpack.NamedModulesPlugin(),
       new RemoveStrictPlugin(),
       // Identify files that are generated in development but not in production and create stubs to avoid a 404
       // Pretty nasty hack, would be a little better if this was purely JS
       new WebpackShellPlugin({
         onBuildEnd:[
-          mode == 'development' ? 'echo Skipping JS stub generation' : 'python -c \'exec(\"\"\"\nimport glob\nimport os\n\nstatic_js_dirs = [\n    "CTFd/themes/core/static/js/**/*.dev.js",\n    "CTFd/themes/admin/static/js/**/*.dev.js",\n]\n\nfor js_dir in static_js_dirs:\n    for path in glob.glob(js_dir, recursive=True):\n        if path.endswith(".dev.js"):\n            path = path.replace(".dev.js", ".min.js")\n            if os.path.isfile(path) is False:\n                open(path, "a").close()\n\"\"\")\''
+          mode == 'development' ? 'echo Skipping JS stub generation' : 'python3 -c \'exec(\"\"\"\nimport glob\nimport os\n\nstatic_js_dirs = [\n    "CTFd/themes/core/static/js/**/*.dev.js",\n    "CTFd/themes/admin/static/js/**/*.dev.js",\n]\n\nfor js_dir in static_js_dirs:\n    for path in glob.glob(js_dir, recursive=True):\n        if path.endswith(".dev.js"):\n            path = path.replace(".dev.js", ".min.js")\n            if os.path.isfile(path) is False:\n                open(path, "a").close()\n\"\"\")\''
         ],
         safe: true,
       }),
@@ -166,6 +206,7 @@ function getCSSConfig(root, type, entries, mode) {
 
   return {
     entry: out,
+    mode: mode,
     output: {
       path: path.resolve(__dirname, 'CTFd', root, 'static', type),
       publicPath: '/' + root + '/static/' + type,

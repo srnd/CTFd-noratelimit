@@ -6,7 +6,11 @@ import moment from "moment-timezone";
 import CTFd from "core/CTFd";
 import { default as helpers } from "core/helpers";
 import $ from "jquery";
-import { ezQuery, ezProgressBar } from "core/ezq";
+import { ezQuery, ezProgressBar, ezAlert } from "core/ezq";
+import CodeMirror from "codemirror";
+import "codemirror/mode/htmlmixed/htmlmixed.js";
+import Vue from "vue/dist/vue.esm.browser";
+import FieldList from "../components/configs/fields/FieldList.vue";
 
 function loadTimestamp(place, timestamp) {
   if (typeof timestamp == "string") {
@@ -108,7 +112,7 @@ function updateConfigs(event) {
     }
   });
 
-  CTFd.api.patch_config_list({}, params).then(response => {
+  CTFd.api.patch_config_list({}, params).then(_response => {
     window.location.reload();
   });
 }
@@ -152,7 +156,7 @@ function removeLogo() {
       };
       CTFd.api
         .patch_config({ configKey: "ctf_logo" }, params)
-        .then(response => {
+        .then(_response => {
           window.location.reload();
         });
     }
@@ -180,7 +184,6 @@ function importConfig(event) {
     contentType: false,
     statusCode: {
       500: function(resp) {
-        console.log(resp.responseText);
         alert(resp.responseText);
       }
     },
@@ -197,7 +200,7 @@ function importConfig(event) {
       };
       return xhr;
     },
-    success: function(data) {
+    success: function(_data) {
       pg = ezProgressBar({
         target: pg,
         width: 100
@@ -214,12 +217,7 @@ function importConfig(event) {
 
 function exportConfig(event) {
   event.preventDefault();
-  const href = CTFd.config.urlRoot + "/admin/export";
   window.location.href = $(this).attr("href");
-}
-
-function showTab(event) {
-  window.location.hash = this.hash;
 }
 
 function insertTimezones(target) {
@@ -233,6 +231,91 @@ function insertTimezones(target) {
 }
 
 $(() => {
+  const theme_header_editor = CodeMirror.fromTextArea(
+    document.getElementById("theme-header"),
+    {
+      lineNumbers: true,
+      lineWrapping: true,
+      mode: "htmlmixed",
+      htmlMode: true
+    }
+  );
+
+  const theme_footer_editor = CodeMirror.fromTextArea(
+    document.getElementById("theme-footer"),
+    {
+      lineNumbers: true,
+      lineWrapping: true,
+      mode: "htmlmixed",
+      htmlMode: true
+    }
+  );
+
+  const theme_settings_editor = CodeMirror.fromTextArea(
+    document.getElementById("theme-settings"),
+    {
+      lineNumbers: true,
+      lineWrapping: true,
+      mode: { name: "javascript", json: true }
+    }
+  );
+
+  // Handle refreshing codemirror when switching tabs.
+  // Better than the autorefresh approach b/c there's no flicker
+  $("a[href='#theme']").on("shown.bs.tab", function(_e) {
+    theme_header_editor.refresh();
+    theme_footer_editor.refresh();
+    theme_settings_editor.refresh();
+  });
+
+  $(
+    "a[href='#legal'], a[href='#tos-config'], a[href='#privacy-policy-config']"
+  ).on("shown.bs.tab", function(_e) {
+    $("#tos-config .CodeMirror").each(function(i, el) {
+      el.CodeMirror.refresh();
+    });
+    $("#privacy-policy-config .CodeMirror").each(function(i, el) {
+      el.CodeMirror.refresh();
+    });
+  });
+
+  $("#theme-settings-modal form").submit(function(e) {
+    e.preventDefault();
+    theme_settings_editor
+      .getDoc()
+      .setValue(JSON.stringify($(this).serializeJSON(), null, 2));
+    $("#theme-settings-modal").modal("hide");
+  });
+
+  $("#theme-settings-button").click(function() {
+    let form = $("#theme-settings-modal form");
+    let data;
+
+    // Ignore invalid JSON data
+    try {
+      data = JSON.parse(theme_settings_editor.getValue());
+    } catch (e) {
+      data = {};
+    }
+
+    $.each(data, function(key, value) {
+      var ctrl = form.find(`[name='${key}']`);
+      switch (ctrl.prop("type")) {
+        case "radio":
+        case "checkbox":
+          ctrl.each(function() {
+            if ($(this).attr("value") == value) {
+              $(this).attr("checked", value);
+            }
+          });
+          break;
+        default:
+          ctrl.val(value);
+      }
+    });
+    $("#theme-settings-modal").modal();
+  });
+
   insertTimezones($("#start-timezone"));
   insertTimezones($("#end-timezone"));
   insertTimezones($("#freeze-timezone"));
@@ -242,21 +325,22 @@ $(() => {
   $("#remove-logo").click(removeLogo);
   $("#export-button").click(exportConfig);
   $("#import-button").click(importConfig);
-  $(".nav-pills a").click(showTab);
   $("#config-color-update").click(function() {
     const hex_code = $("#config-color-picker").val();
-    const user_css = $("#css-editor").val();
+    const user_css = theme_header_editor.getValue();
     let new_css;
-    if (user_css.lenth) {
+    if (user_css.length) {
       let css_vars = `theme-color: ${hex_code};`;
       new_css = user_css.replace(/theme-color: (.*);/, css_vars);
     } else {
       new_css =
+        `<style id="theme-color">\n` +
         `:root {--theme-color: ${hex_code};}\n` +
         `.navbar{background-color: var(--theme-color) !important;}\n` +
-        `.jumbotron{background-color: var(--theme-color) !important;}\n`;
+        `.jumbotron{background-color: var(--theme-color) !important;}\n` +
+        `</style>\n`;
     }
-    $("#css-editor").val(new_css);
+    theme_header_editor.getDoc().setValue(new_css);
   });
 
   $(".start-date").change(function() {
@@ -268,12 +352,6 @@ $(() => {
   $(".freeze-date").change(function() {
     loadDateValues("freeze");
   });
-
-  let hash = window.location.hash;
-  if (hash) {
-    hash = hash.replace("<>[]'\"", "");
-    $('ul.nav a[href="' + hash + '"]').tab("show");
-  }
 
   const start = $("#start").val();
   const end = $("#end").val();
@@ -295,4 +373,23 @@ $(() => {
       $("#mail_username_password").toggle(this.checked);
     })
     .change();
+
+  // Insert FieldList element for users
+  const fieldList = Vue.extend(FieldList);
+  let userVueContainer = document.createElement("div");
+  document.querySelector("#user-field-list").appendChild(userVueContainer);
+  new fieldList({
+    propsData: {
+      type: "user"
+    }
+  }).$mount(userVueContainer);
+
+  // Insert FieldList element for teams
+  let teamVueContainer = document.createElement("div");
+  document.querySelector("#team-field-list").appendChild(teamVueContainer);
+  new fieldList({
+    propsData: {
+      type: "team"
+    }
+  }).$mount(teamVueContainer);
 });
