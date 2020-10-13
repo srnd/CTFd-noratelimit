@@ -21,7 +21,7 @@
 				<div class="tab-content">
 					<div role="tabpanel" class="tab-pane fade show active" id="challenge">
 						<h2 class='challenge-name text-center pt-3'>{{ name }}</h2>
-						<h3 class="challenge-value text-center">{{ value }}</h3>
+						<h3 class="challenge-value text-center">{{ value }}pts</h3>
 						<div class="challenge-tags text-center">
 							{% for tag in tags %}
 								<span class='badge badge-info challenge-tag'>{{ tag }}</span>
@@ -75,7 +75,7 @@
 						<div class="row submit-row">
 							<div class="col-md-9 form-group">
 								<input class="form-control" type="text" name="answer" id="submission-input"
-									   placeholder="Flag"/>
+									   placeholder="Answer/Flag"/>
 								<input id="challenge-id" type="hidden" value="{{ id }}">
 							</div>
 							<div class="col-md-3 form-group key-submit">
